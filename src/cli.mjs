@@ -4,9 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline/promises';
 import { parseArgv, takeFlag } from './args.mjs';
-import { ApiError, DEFAULT_MODEL_FALLBACK, getIntegrations, listModels } from './api.mjs';
+import { ApiError, DEFAULT_MODEL_FALLBACK, getIntegrations, getUsage, listModels } from './api.mjs';
 import { KEY_PREFIX, maskKey, readStore, resolveKey, writeStore } from './config.mjs';
 import { claudeEnv, codexArgs, codexEnv, resolveExecutable, runTool } from './launch.mjs';
+import { costDelta, formatSummary, paygChanged, usageSnapshot } from './summary.mjs';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
@@ -25,10 +26,32 @@ Pemakaian:
   bclink [--main MODEL] claude [args]  jalankan Claude Code dengan model BotConnector
   bclink [--main MODEL] codex [args]   jalankan Codex CLI dengan model BotConnector
   bclink [--api-key KUNCI] ...         pakai kunci ini untuk satu perintah saja
+  bclink --no-summary ...              lewati ringkasan kuota di akhir sesi
 
 Urutan kunci: --api-key, lalu kunci tersimpan (configure), lalu BOTCONNECTOR_API_KEY.
 Konfigurasi milik tool tidak diubah. Konfigurasi sementara dihapus setelah tool selesai.
 `;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function snapshot(key, fetchImpl) {
+  try { return usageSnapshot(await getUsage(key, { fetchImpl })); } catch { return null; }
+}
+
+// Prints the account's quota change around a session. It never changes the tool's exit code, and any failure
+// to read /v1/usage just skips the summary. Metering shows up within seconds, so retry once when nothing moved.
+async function withSummary({ key, fetchImpl, err, delayMs, enabled, free }, launch) {
+  const before = enabled ? await snapshot(key, fetchImpl) : null;
+  const code = await launch();
+  if (!before) return code;
+  let after = await snapshot(key, fetchImpl);
+  if (after && costDelta(before, after) === 0 && !paygChanged(before, after)) {
+    await sleep(delayMs);
+    after = (await snapshot(key, fetchImpl)) || after;
+  }
+  if (after) err.write('\n' + formatSummary(before, after, { free }));
+  return code;
+}
 
 function promptKey() {
   if (!process.stdin.isTTY) return Promise.resolve(null);
@@ -100,8 +123,10 @@ export async function run(argv, deps = {}) {
     const access = entry.botconnector_access || 'model';
     err.write(`${tool.label} › ${model} (BotConnector, ${access})\n`);
 
+    const summary = { key, fetchImpl, err, delayMs: deps.summaryDelayMs ?? 3000, enabled: !parsed.noSummary, free: entry.botconnector_access === 'free' };
+
     if (parsed.command === 'codex') {
-      return await runToolImpl({ executable, args: [...codexArgs({ model }), ...parsed.rest], env: codexEnv({ key, env }), platform });
+      return await withSummary(summary, () => runToolImpl({ executable, args: [...codexArgs({ model }), ...parsed.rest], env: codexEnv({ key, env }), platform }));
     }
 
     // A per-launch config folder, like Together Link: the user's plugins, hooks and MCP servers are not loaded
@@ -109,7 +134,7 @@ export async function run(argv, deps = {}) {
     const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bclink-claude-'));
     try {
       const env2 = { ...claudeEnv({ key, model, env }), CLAUDE_CONFIG_DIR: configDir };
-      return await runToolImpl({ executable, args: ['--model', model, ...parsed.rest], env: env2, platform });
+      return await withSummary(summary, () => runToolImpl({ executable, args: ['--model', model, ...parsed.rest], env: env2, platform }));
     } finally {
       await fs.rm(configDir, { recursive: true, force: true });
     }

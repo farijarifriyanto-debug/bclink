@@ -1,6 +1,6 @@
 // Global flags sit before the command (like Together Link); everything after a tool name passes through.
 export function parseArgv(argv) {
-  const out = { apiKey: undefined, main: undefined, help: false, version: false, command: undefined, rest: [] };
+  const out = { apiKey: undefined, main: undefined, noSummary: false, help: false, version: false, command: undefined, rest: [] };
   const value = (flag, i) => {
     if (argv[i + 1] === undefined) throw new Error(`${flag} butuh nilai`);
     return argv[i + 1];
@@ -12,6 +12,7 @@ export function parseArgv(argv) {
     else if (a.startsWith('--api-key=')) out.apiKey = a.slice('--api-key='.length);
     else if (a === '--main') { out.main = value(a, i); i++; }
     else if (a.startsWith('--main=')) out.main = a.slice('--main='.length);
+    else if (a === '--no-summary') out.noSummary = true;
     else if (a === '-h' || a === '--help') out.help = true;
     else if (a === '-v' || a === '--version') out.version = true;
     else break;

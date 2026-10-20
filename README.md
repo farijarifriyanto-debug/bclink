@@ -22,6 +22,24 @@ Urutan kunci: `--api-key`, lalu kunci tersimpan dari `configure`, lalu `BOTCONNE
 - **Codex:** pengaturan provider diberikan lewat flag `-c` dan `-m` untuk satu sesi (`wire_api="responses"`). Kunci hanya ada di environment (`BOTCONNECTOR_API_KEY`), tidak di argumen. `~/.codex` tidak ditulis, sehingga hook dan konfigurasi Codex Anda tetap berlaku.
 - Model default diambil dari `default_model` di `/v1/integrations`. `--main` harus berupa model yang ada di `/v1/models`.
 
+## Ringkasan kuota di akhir sesi
+
+Setelah Claude Code atau Codex selesai, `bclink` mencetak selisih kuota paket akun Anda ke **stderr** (stdout tool tidak berubah, jadi aman untuk skrip):
+
+```
+Kuota paket terpakai: $0.006354 (0.38% dari kuota bulanan)
+Ini selisih akun; pemakaian lain di akun yang sama ikut terhitung.
+```
+
+- Sumbernya snapshot `GET /v1/usage` sebelum dan sesudah sesi. Endpoint itu belum ada di dokumentasi publik BotConnector, jadi bentuknya bisa berubah.
+- Angkanya mikro-USD biaya provider. Satuan ini dicocokkan dengan harga publik `deepseek-v4.1-flash`, dan ringkasan dicocokkan dengan selisih `/v1/usage` yang dibaca terpisah: Claude Code 6.354 mikro-USD dan Codex 1.822 mikro-USD, keduanya sama persis. Jalur model gratis juga diuji di kedua tool.
+- Ini **selisih akun**, bukan hitungan per sesi yang pasti. Pemakaian dari klien lain di akun yang sama ikut terhitung.
+- Pembukuan muncul dalam beberapa detik. Kalau belum berubah, `bclink` menunggu 3 detik dan membaca sekali lagi.
+- Saldo **PAYG tidak ditampilkan sebagai angka**, karena satuannya belum terverifikasi. Jika berubah, hanya muncul catatan "Saldo PAYG berubah".
+- Tidak ada perbandingan "hemat dibanding model lain". Datanya tidak mendukung itu.
+- Kegagalan membaca `/v1/usage` hanya melewati ringkasan. Kode keluar tool tidak pernah diubah.
+- Lewati dengan `bclink --no-summary ...`.
+
 ## Kenapa OpenCode belum ada
 
 OpenCode 2.0.32 hanya memuat provider kustom dari config proyek (`opencode.json`) atau config global. `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`, dan `OPENCODE_CONFIG_CONTENT` tidak memuat provider, sehingga model tidak bisa dipastikan per sesi. Model terakhir yang dipakai dari daftar `recent` OpenCode justru yang berjalan. Tanpa pin, banner akan salah, jadi jalur ini dihapus.

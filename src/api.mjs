@@ -35,3 +35,8 @@ export async function listModels(key, opts = {}) {
 export async function getIntegrations(opts = {}) {
   return getJson(`${BASE_URL}/v1/integrations`, { ...opts, key: null });
 }
+
+// GET /v1/usage is not in the public docs yet. It returns plan quota windows and the PAYG balance as a snapshot.
+export async function getUsage(key, opts = {}) {
+  return getJson(`${BASE_URL}/v1/usage`, { timeoutMs: 10000, ...opts, key });
+}

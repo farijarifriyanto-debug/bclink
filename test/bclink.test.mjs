@@ -7,6 +7,7 @@ import { parseArgv, takeFlag } from '../src/args.mjs';
 import { maskKey, readStore, resolveKey, writeStore, configFile } from '../src/config.mjs';
 import { claudeEnv, codexArgs, codexEnv } from '../src/launch.mjs';
 import { run } from '../src/cli.mjs';
+import { formatSummary, usageSnapshot, usd } from '../src/summary.mjs';
 
 const KEY = 'bc_live_0123456789abcdefSECRET7890';
 
@@ -224,4 +225,93 @@ test('codex launch: provider flags first, user arguments after, key only in the 
   assert.ok(!seen.args.join(' ').includes(KEY));
   assert.equal(seen.env.BOTCONNECTOR_API_KEY, KEY);
   assert.equal(seen.env.CLAUDE_CONFIG_DIR, undefined);
+});
+
+const usageBody = (cost, { payg = 1000 } = {}) => ({
+  quota: { used_provider_cost_micros: cost, windows: { monthly: { limit_micros: 1667316, used_micros: cost } } },
+  payg: { balance_micros: payg, current_period_spend_micros: 5 },
+});
+
+test('usageSnapshot reads provider cost and rejects bodies without it', () => {
+  const snap = usageSnapshot(usageBody(725295));
+  assert.equal(snap.providerCost, 725295);
+  assert.equal(snap.monthlyLimit, 1667316);
+  assert.equal(usageSnapshot({}), null);
+  assert.equal(usageSnapshot(null), null);
+});
+
+test('usd keeps six decimals for small amounts', () => {
+  assert.equal(usd(565), '$0.000565');
+  assert.equal(usd(25000), '$0.0250');
+});
+
+test('formatSummary shows plan quota cost, percent of the monthly limit, and the account-delta caveat', () => {
+  const text = formatSummary(usageSnapshot(usageBody(100)), usageSnapshot(usageBody(665)));
+  assert.match(text, /\$0\.000565/);
+  assert.match(text, /0\.03% dari kuota bulanan/);
+  assert.match(text, /selisih akun/);
+  assert.ok(!/hemat|Opus/i.test(text), 'no savings claim');
+});
+
+test('formatSummary: no change says so, and a PAYG change shows no PAYG figure', () => {
+  const same = formatSummary(usageSnapshot(usageBody(100)), usageSnapshot(usageBody(100)));
+  assert.match(same, /tidak ada perubahan/);
+  assert.ok(!same.includes('model gratis'), 'free wording only when the model is free');
+  assert.match(formatSummary(usageSnapshot(usageBody(100)), usageSnapshot(usageBody(100)), { free: true }), /model gratis tidak memakai kuota/);
+  const payg = formatSummary(usageSnapshot(usageBody(100, { payg: 1000 })), usageSnapshot(usageBody(100, { payg: 900 })));
+  assert.match(payg, /Saldo PAYG berubah/);
+  assert.ok(!payg.includes('900') && !payg.includes('1000'));
+});
+
+function usageDeps(dir, usageBodies, extra = {}) {
+  let n = 0;
+  const calls = { usage: 0 };
+  return {
+    calls,
+    deps: {
+      stdout: sink(), stderr: extra.err || sink(), env: { BCLINK_CONFIG_DIR: dir, BOTCONNECTOR_API_KEY: KEY }, platform: 'linux',
+      fetchImpl: fakeFetch({
+        '/v1/models': MODELS,
+        '/v1/integrations': INTEGRATIONS,
+        '/v1/usage': () => { calls.usage++; const b = usageBodies[Math.min(n++, usageBodies.length - 1)]; return b === null ? { status: 404, body: {} } : { body: b }; },
+      }),
+      resolveExecutable: () => '/usr/bin/claude',
+      runTool: extra.runTool || (async () => 0),
+      summaryDelayMs: 0,
+    },
+  };
+}
+
+test('claude session prints the quota change on stderr and keeps the tool exit code', async (t) => {
+  const dir = await tmpConfigDir(t);
+  const err = sink();
+  const { deps } = usageDeps(dir, [usageBody(100), usageBody(665)], { err, runTool: async () => 3 });
+  const code = await run(['claude'], deps);
+  assert.equal(code, 3);
+  assert.match(err.text(), /Kuota paket terpakai: \$0\.000565/);
+});
+
+test('summary waits once and re-reads when metering has not moved yet', async (t) => {
+  const dir = await tmpConfigDir(t);
+  const err = sink();
+  const { deps, calls } = usageDeps(dir, [usageBody(100), usageBody(100), usageBody(700)], { err });
+  await run(['claude'], deps);
+  assert.equal(calls.usage, 3);
+  assert.match(err.text(), /\$0\.000600/);
+});
+
+test('a failing /v1/usage never blocks the session or changes its exit code', async (t) => {
+  const dir = await tmpConfigDir(t);
+  const err = sink();
+  const { deps } = usageDeps(dir, [null], { err, runTool: async () => 0 });
+  const code = await run(['claude'], deps);
+  assert.equal(code, 0);
+  assert.ok(!err.text().includes('Kuota paket'));
+});
+
+test('--no-summary makes no /v1/usage requests', async (t) => {
+  const dir = await tmpConfigDir(t);
+  const { deps, calls } = usageDeps(dir, [usageBody(1), usageBody(2)]);
+  assert.equal(await run(['--no-summary', 'claude'], deps), 0);
+  assert.equal(calls.usage, 0);
 });
