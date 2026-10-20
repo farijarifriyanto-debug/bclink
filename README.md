@@ -2,7 +2,18 @@
 
 Jalankan Claude Code dan Codex dengan model BotConnector (botconnector.id), tanpa mengubah pengaturan tool Anda.
 
-Status: **belum dipublikasikan** (`private`). Mendukung Claude Code dan Codex. OpenCode tidak didukung, lihat di bawah. Hanya model yang ada di `/v1/models` BotConnector yang bisa dipakai.
+Mendukung Claude Code dan Codex. OpenCode tidak didukung, lihat di bawah. Hanya model yang ada di `/v1/models` BotConnector yang bisa dipakai.
+
+## Pasang
+
+Butuh Node.js 18.18 atau lebih baru, dan Claude Code dan/atau Codex CLI yang sudah terpasang sendiri. Kunci API dibuat di [Workspace BotConnector](https://app.botconnector.id/workspace/#/api).
+
+```bash
+npm install -g @botconnector/link
+bclink --version
+```
+
+Paket ini ada di npm: https://www.npmjs.com/package/@botconnector/link
 
 ## Pemakaian
 
