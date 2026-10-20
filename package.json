@@ -1,0 +1,22 @@
+{
+  "name": "@botconnector/link",
+  "version": "0.1.0",
+  "description": "Run Claude Code and OpenCode with models from BotConnector, without changing your own tool settings",
+  "type": "module",
+  "bin": {
+    "bclink": "bin/bclink.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.18"
+  },
+  "scripts": {
+    "test": "node --test test/bclink.test.mjs"
+  },
+  "license": "MIT",
+  "private": true
+}
