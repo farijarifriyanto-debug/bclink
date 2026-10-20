@@ -1,7 +1,7 @@
 {
   "name": "@botconnector/link",
   "version": "0.1.0",
-  "description": "Run Claude Code and OpenCode with models from BotConnector, without changing your own tool settings",
+  "description": "Run Claude Code and Codex with BotConnector models (botconnector.id), without changing your own tool settings",
   "type": "module",
   "bin": {
     "bclink": "bin/bclink.mjs"
@@ -9,7 +9,8 @@
   "files": [
     "bin",
     "src",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18.18"
@@ -17,6 +18,25 @@
   "scripts": {
     "test": "node --test test/bclink.test.mjs"
   },
+  "keywords": [
+    "botconnector",
+    "claude-code",
+    "codex",
+    "cli",
+    "llm",
+    "launcher"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/farijarifriyanto-debug/bclink.git"
+  },
+  "bugs": {
+    "url": "https://github.com/farijarifriyanto-debug/bclink/issues"
+  },
+  "homepage": "https://github.com/farijarifriyanto-debug/bclink#readme",
+  "author": "BotConnector",
   "license": "MIT",
-  "private": true
+  "publishConfig": {
+    "access": "public"
+  }
 }
